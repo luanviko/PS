@@ -17,8 +17,10 @@ def main():
     OFF = 0
 
     ps = findPS(baud_rate)
-    turnVoltage(ps, OFF)
-    
+    setRemoteControl(ps, ON)
+    switchVoltage(ps, ON)
+    setVoltage(ps, voltage, voltage_offset)
+    ps.close()
 
 def findPS(baud_rate, ps_address=0, vtimeout=2):
     ## Look for the any port with Prolific in it.
@@ -26,58 +28,58 @@ def findPS(baud_rate, ps_address=0, vtimeout=2):
     ps = serial.Serial("COM3", baud_rate, timeout=vtimeout)
     return ps
 
-def turnVoltage(ps, ON_OFF, ps_address=0, length_packet=26):
+def setRemoteControl(ps, ON_OFF, ps_address=0, length_packet=26):
+    ## Sets 0x20 to 3rd byte and changes the 4rd byte to ON_OFF.
+    bytes_written = ps.write(makeStack("0x20", ON_OFF))
+    response = ps.read(length_packet)
+    if ON_OFF == 1:
+        print(f"Remote control: ON ({hex(response[3])})")
+    else:
+        print(f"Remote control: OFF ({hex(response[3])})")
+
+def switchVoltage(ps, ON_OFF, ps_address=0, length_packet=26):
+    ## Sets 0x21 at 3rd byte and changes 4th byte to ON_OFF.
     bytes_written = ps.write(makeStack("0x21", ON_OFF))
     response = ps.read(length_packet)
-    print("Remote control:", hex(response[3]))
+    print("Voltage output:", hex(response[3]))
 
-def setVoltage(ps,  a, voltage_offset, length_packet=26):
-
-    print("HHHEHEHEHER:", length_packet)
-    original_voltage = a
-    a = float(a)+voltage_offset
-    print(a)
-    a = np.int(a*1000)
-    print(a, hex(a))
-    a = hex(a)
- 
-    if len(a) > 0:
-        if (len(a) % 2 == 0):
-            pairs = ["0x"+a[i:i+2] for i in range(2, len(a), 2)]
+def setVoltage(ps, voltage, voltage_offset, length_packet=26):
+    ## Encode float into 4 byte addresses using the little-endian manner.
+    original_voltage = voltage
+    voltage = float(voltage)+voltage_offset
+    voltage = np.int(voltage*1000)
+    voltage = hex(voltage)
+    if len(voltage) > 0:
+        if (len(voltage) % 2 == 0):
+            pairs = ["0x"+voltage[i:i+2] for i in range(2, len(voltage), 2)]
             pairs = np.flip(pairs, axis=None)
         else:
-            a = "0x0"+a[2:]
-            pairs = ["0x"+a[i:i+2] for i in range(2, len(a), 2)]
+            voltage = "0x0"+voltage[2:]
+            pairs = ["0x"+voltage[i:i+2] for i in range(2, len(voltage), 2)]
             pairs = np.flip(pairs, axis=None)
-    
-    bytes_written = ps.write(makeStack3(ps_address, "0x23", pairs))
+    ## Send encoded command to _makeStack_ and into the PS. 
+    bytes_written = ps.write(makeStack("0x23", pairs))
     response = ps.read(length_packet)
-
-    print("Voltage: ", original_voltage, a, pairs)
-    print("Voltage control:", hex(response[3]), "\n")
+    print("Voltage (V): ", original_voltage, f"({hex(response[3])})")
 
 def checksum256(command):
+    ## Mod 256 of the 25 bytes written into command.
     command_int = [int(comi, 16) for comi in command]
     return np.sum(command_int) % 256
 
-def makeStack(byte_address, byte_value, length_packet=26, ps_address=0):
-
+def makeStack(byte_address, byte_values, length_packet=26, ps_address=0):
+    ## Construct and encode a command using bytearray.
+    if isinstance(byte_values, int):
+        values = [byte_values]
+    else: 
+        values = byte_values
     start = ['0xaa', str(hex(ps_address)), byte_address]
-    val = []
-    val.append(str(hex(byte_value)))
-    reserved = ["0x00" for i in range(0, 21)]
-    # print("val:", val)
-
-    before_checksum = np.concatenate((start, val, reserved), axis=0)
-
+    reserved = ["0x00" for i in range(0, 22-len(values))]
+    before_checksum = np.concatenate((start, values, reserved), axis=0)
     checksum = checksum256(before_checksum)
     checksum_str = str(hex(checksum))
-
     command = np.concatenate((before_checksum, [checksum_str.encode()]), axis=0)
-    # print("Stack: ", command, len(command))
-
     command_int = [int(comi, 16) for comi in command]
-
     return bytearray(command_int)
 
 main()
