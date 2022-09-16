@@ -9,8 +9,8 @@ we use pyserial, as suggested by the manufacturer.
 You can find the manufacturer's own software [on their offical page](https://www.bkprecision.com/products/power-supplies/1787B-0-72vdc-0-15a-programmable-dc-supply-w-rs232-interface.html). 
 
 ## Dependencies
-This script was developed and tested under Windows 11 and 10. It requires python >3, pyserial 3.5.
-You need to install the appropriate drivers, [found here](https://www.bkprecision.com/products/power-supplies/1787B-0-72vdc-0-15a-programmable-dc-supply-w-rs232-interface.html). 
+This script was developed and tested under Windows 10. The manufacturer's drivers do not support Windows 11. 
+It requires python >3, pyserial 3.5 and the appropriate drivers, [found here](https://www.bkprecision.com/products/power-supplies/1787B-0-72vdc-0-15a-programmable-dc-supply-w-rs232-interface.html). 
 
 ## Encoding the voltage value
 
