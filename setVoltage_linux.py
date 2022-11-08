@@ -11,7 +11,7 @@ of the words sent through serial to the equipment.
 Luan Koerich, Nov 2022.
 '''
 
-import numpy as np, serial, time, sys
+import numpy as np, serial, time, sys, platform
 import serial.tools.list_ports
 
 def main():
@@ -69,18 +69,24 @@ def changeVoltage(ps, voltage_offset, new_voltage):
         print("No voltage to be changed. Voltage output:", readVoltage(ps))
 
 def findPS(baud_rate, ps_address=0, vtimeout=2):
-    ## Look for the any port with Prolific in it.
-    ## Assume a single PS connected at a time.
-    # ports = [tuple(p) for p in list(serial.tools.list_ports.comports())]
-    # for port in ports:
-    #     print(port)
-    #     if ('Prolific' in port[1]):
-    #         print(port[1], "found.")
-    #         port_name = port[0]
-    #     else:
-    #         print("Prolific USB-serial converter not found.")
-    #         sys.exit(2)
-    return serial.Serial("/dev/ttyUSB0", baud_rate, timeout=vtimeout)
+    os_name = platform.system()
+    if 'Linux' in os_name:
+        return serial.Serial("/dev/ttyUSB0", baud_rate, timeout=vtimeout)
+    elif 'Windows' in os_name:
+        # Look for the any port with Prolific in it.
+        # Assume a single PS connected at a time.
+        ports = [tuple(p) for p in list(serial.tools.list_ports.comports())]
+        for port in ports:
+            print(port)
+            if ('Prolific' in port[1]):
+                print(port[1], "found.")
+                port_name = port[0]
+            else:
+                print("Prolific USB-serial converter not found.\nPlease check power, connection or drivers.")
+                sys.exit(2)
+    elif 'Darwin' in os_name:
+        print("This script does not support Mac Os. Please modify `findPS` function.")
+        
 
 def setRemoteControl(ps, ON_OFF, ps_address=0, length_packet=26):
     ## Sets 0x20 to 3rd byte and changes the 4rd byte to ON_OFF.
