@@ -65,29 +65,39 @@ The following was decoded from the power supply stack:
   Max. voltage (V): 73.0
 ```
 
-### Set output voltage (0 - 73V)
-IMPORTANT: It will automatically turn ON the power supply.
-Move into the PS folder, then 
-```bash
-python3 setVoltage.py 15.55 
-```
-to set the output voltage to 15.55 V, for example.
-Notice that you the maximum output is 73V. 
-The value that can be output, however, 
-will depend on the maximum output voltage
-that is set by the user
-using 
-
 ### Set max current (0 - 1.55V)
+
 Move into the PS folder, then 
 ```bash 
 python3 setCurrent.py 0.75
 ```
 to set the maximum current output to 0.75 A.
 
+### Set max. voltage (0 - 73V)
+
+Move into PS folder, then 
+```
+python3 setMaxVoltage.py 20.52
+```
+to set the max. voltage output to 20.52 V. 
+You may choose any value between 0 and 73.00 V. 
+
+### Set output voltage (0 - max. voltage)
+
+IMPORTANT: It will automatically turn ON the voltage output.
+Move into the PS folder, then 
+```bash
+python3 setVoltage.py 15.55 
+```
+to set the output voltage to 15.55 V, for example.
+Notice that you the maximum output is the max. voltage 
+value set with `SetMaxVoltage.py`.
+
 ### Power off (set output to 0 V)
-IMPORTANT: The output is NOT ZERO until "OFF"
+IMPORTANT: The output is NOT ZERO until __OFF__
 appears on the screen or on the status.
+Gradually decrease voltage output to zero
+then set it to __OFF__.
 From the PS folder, 
 ```bash
 python3 powerOff.py
