@@ -10,10 +10,14 @@ of the words sent through serial to the equipment.
 
 Luan Koerich, Nov 2022.
 '''
-import numpy as np, serial, time, sys, platform
+import numpy as np, serial, time, sys, platform, os
 import serial.tools.list_ports
 
 def changeVoltage(ps, voltage_offset, new_voltage):
+    ''' 
+    Determine if voltage is higher than current voltage
+    then raise or lower voltage gradually.
+    '''
     current_voltage = readVoltage(ps)
     if (new_voltage > current_voltage):
         print("Ramping voltage up...")
@@ -28,28 +32,50 @@ def changeVoltage(ps, voltage_offset, new_voltage):
     else: 
         print("No voltage to be changed. Voltage output: {0:4.2f} V".format(readVoltage(ps)))
 
+def fetchSysPath():
+    ''' 
+    Open config file containing the system path to the serial port.
+    '''
+    try:
+        with open("./deviceSysPath.config", "r") as file_input: 
+            return file_input.readlines()[0].replace("\n","")
+    except:
+        print("Please try running ./findPS.sh one more time.")
+        sys.exit(1)
+
 def findPS(baud_rate, ps_address=0, vtimeout=2):
     os_name = platform.system()
     if 'Linux' in os_name:
-        return serial.Serial("/dev/ttyUSB0", baud_rate, timeout=vtimeout)
+        try:
+            ps = serial.Serial(fetchSysPath(), baud_rate, timeout=vtimeout)
+            return ps 
+        except serial.serialutil.SerialException:
+            print("Error opening serial port.") 
+            sys.stdout.write("Run ./findPS.sh and allow "+os.getlogin()+" to access it.\n")
+            sys.exit(1)
+        except ValueError:
+            print("Error opening serial. Please check baud rate and timeout values.")
+
     elif 'Windows' in os_name:
-        # Look for the any port with Prolific in it.
-        # Assume a single PS connected at a time.
         ports = [tuple(p) for p in list(serial.tools.list_ports.comports())]
         for port in ports:
             print(port)
             if ('Prolific' in port[1]):
                 print(port[1], "found.")
                 port_name = port[0]
+                return serial.Serial(port[0], baud_rate, timeout=vtimeout)
             else:
                 print("Prolific USB-serial converter not found.\nPlease check power, connection or drivers.")
                 sys.exit(2)
+
     elif 'Darwin' in os_name:
         print("This script does not support Mac Os. Please modify `findPS` function.")
         
 
 def setRemoteControl(ps, ON_OFF, ps_address=0, length_packet=26):
-    ## Sets 0x20 to 3rd byte and changes the 4rd byte to ON_OFF.
+    '''
+    Set sub address 0x20 to either 1 or 0 (remote or local).
+    '''
     bytes_written = ps.write(makeStack("0x20", ON_OFF))
     response = ps.read(length_packet)
     if response:
@@ -63,7 +89,9 @@ def setRemoteControl(ps, ON_OFF, ps_address=0, length_packet=26):
         print("Remote control on/off: communication failed.")
 
 def switchVoltage(ps, ON_OFF, ps_address=0, length_packet=26):
-    ## Sets 0x21 at 3rd byte and changes 4th byte to ON_OFF.
+    '''
+    Set sub address 0x21 to either 1 or 0 (ON or OFF).
+    '''
     bytes_written = ps.write(makeStack("0x21", ON_OFF))
     response = ps.read(length_packet)
     if response:
@@ -76,8 +104,11 @@ def switchVoltage(ps, ON_OFF, ps_address=0, length_packet=26):
     else:
         print("Turning on/off: communication failed.")
 
-def setCurrentLimit(ps, current, length_packet=26):
-    ## Encode float into 4 byte addresses using the little-endian manner.
+def make_pairs(current):
+    ''' 
+    Convert decimal value into 4-bit hex pairs
+    following little-endian sequence.
+    '''
     original_current = current
     current = float(current)
     current = int(current*1000)
@@ -90,49 +121,67 @@ def setCurrentLimit(ps, current, length_packet=26):
             current = "0x0"+current[2:]
             pairs = ["0x"+current[i:i+2] for i in range(2, len(current), 2)]
             pairs = np.flip(pairs, axis=None)
-    ## Send encoded command to _makeStack_ and into the PS. 
-    bytes_written = ps.write(makeStack("0x24", pairs))
+    return pairs 
+
+def setCurrentLimit(ps, current, length_packet=26):
+    '''
+    Encode float into 4 byte addresses using the little-endian manner
+    and send it to subaddress 0x24. 
+    '''
+    bytes_written = ps.write(makeStack("0x24", make_pairs(current)))
     response = ps.read(length_packet)
     if response:
         if (hex(response[3]) == "0x80"):
-            print(f"Changing current to: {original_current:4.2f} A.", end="\n")
+            print(f"Changing current to: {current:4.2f} A.", end="\n")
         else:
             print(f"Changing current: failed ({hex(response[3])})")
     else:
         print("Changing current: communication failed.")
 
 def setVoltage(ps, voltage, voltage_offset, length_packet=26):
-    ## Encode float into 4 byte addresses using the little-endian manner.
-    original_voltage = voltage
-    voltage = float(voltage)+voltage_offset
-    voltage = int(voltage*1000)
-    voltage = hex(voltage)
-    if len(voltage) > 0:
-        if (len(voltage) % 2 == 0):
-            pairs = ["0x"+voltage[i:i+2] for i in range(2, len(voltage), 2)]
-            pairs = np.flip(pairs, axis=None)
-        else:
-            voltage = "0x0"+voltage[2:]
-            pairs = ["0x"+voltage[i:i+2] for i in range(2, len(voltage), 2)]
-            pairs = np.flip(pairs, axis=None)
-    ## Send encoded command to _makeStack_ and into the PS. 
-    bytes_written = ps.write(makeStack("0x23", pairs))
+    '''
+    Encode float into 4 byte addresses using the little-endian manner
+    and send it to subaddress 0x23. 
+    '''
+    bytes_written = ps.write(makeStack("0x23", make_pairs(voltage)))
     response = ps.read(length_packet)
     if response:
         if (hex(response[3]) == "0x80"):
-            print(f"Voltage set to  : {original_voltage:4.2f} V.", end="\r")
+            print(f"Voltage set to  : {voltage:4.2f} V.", end="\r")
         else:
             print(f"Changing voltage: failed ({hex(response[3])})")
     else:
         print("Changing voltage: communication failed.")
 
+def setMaxVoltage(ps, voltage, voltage_offset, length_packet=26):
+    '''
+    Encode float into 4 byte addresses using the little-endian manner
+    and send it to subaddress 0x22. 
+    '''
+    bytes_written = ps.write(makeStack("0x22", make_pairs(voltage)))
+    response = ps.read(length_packet)
+    if response:
+        if (hex(response[3]) == "0x80"):
+            print(f"Max. voltage set to: {voltage:4.2f} V.", end="\n")
+        else:
+            print(f"Changing max. voltage: failed ({hex(response[3])})")
+    else:
+        print("Changing max. voltage: communication failed.")
+
 def checksum256(command):
-    ## Mod 256 of the sum of 25 adresses written into command.
+    '''
+    Simple checksum test to be added to the last bit of the stack.
+    '''
     command_int = [int(comi, 16) for comi in command]
     return np.sum(command_int) % 256
 
 def makeStack(byte_address, byte_values, length_packet=26, ps_address=0):
     ## Construct and encode a command using bytearray.
+    '''
+    Build a stack of 26 bits to be sent to the PS. 
+    The third bit contains the sub address. 
+    The following bits contain the voltage/ current values to be set.
+    '''
     if isinstance(byte_values, int):
         values = [byte_values]
     else: 
@@ -147,7 +196,9 @@ def makeStack(byte_address, byte_values, length_packet=26, ps_address=0):
     return bytearray(command_int)
 
 def rampUp(ps, final_voltage, voltage_offset, initial_voltage=0., step=0.5, wait=0.8):
-    ## Go from 0 to a given voltage waiting after every step.
+    '''
+    Increse voltage gradually from :initial_voltage: to :final_voltage:.
+    '''
     voltage_range = np.arange(initial_voltage, final_voltage+voltage_offset+step, step)
     # print(initial_voltage, final_voltage, voltage_range)
     for voltage in voltage_range:
@@ -162,7 +213,11 @@ def rampUp(ps, final_voltage, voltage_offset, initial_voltage=0., step=0.5, wait
             break
 
 def readVoltage(ps, length_packet=26):
-    ## Send an empty stack to 0x26 then decodes the response.
+    '''
+    Send empty stack to 0x26 and receive status stack.
+    Decode bits 8 to 5 in little-endian format
+    to convert hex to decimal.
+    '''
     bytes_written = ps.write(makeStack("0x26", 0))
     response = ps.read(length_packet)
     voltage_digits = [response[8], response[7], response[6], response[5]]
@@ -173,8 +228,11 @@ def readVoltage(ps, length_packet=26):
     return voltage
 
 def rampDown(ps, voltage_offset, final_voltage=0., step=0.5, wait=1):
+    '''
+    Set voltage to a given value and wait.
+    Repeat that until :final_voltage: is reached.
+    '''
     current_voltage = readVoltage(ps)
-    # last_digit = int(str(current_voltage)[-1])
     voltage_range = np.arange(current_voltage, final_voltage+voltage_offset-step, -1.*step)
     for voltage in voltage_range:
         if (voltage > final_voltage):
@@ -186,6 +244,10 @@ def rampDown(ps, voltage_offset, final_voltage=0., step=0.5, wait=1):
             break
 
 def decodeBytes(response, positions):
+    '''
+    Follow little-endian format to decode 
+    bit pairs into decimal integer value.
+    '''
     digits = [response[i] for i in positions]
     digits = [hex(v) for v in digits]
     pairs = [digit[2:] for digit in digits]
@@ -194,6 +256,11 @@ def decodeBytes(response, positions):
     return integer_value
 
 def readStatus(ps, length_packet=26):
+    '''
+    Send empty stack to 0x26 to get information 
+    about the power supply. Decode bytes into decimals 
+    and organize into dictionary.
+    '''
     status = {}
     bytes_written = ps.write(makeStack("0x26", 0))
     response = ps.read(length_packet)
@@ -210,12 +277,17 @@ def readStatus(ps, length_packet=26):
     return status
 
 def printStatus(ps):
+    '''Print status bytes on screen once.'''
     status = readStatus(ps)
     print("The following was decoded from the power supply stack:")
     for key in status.keys():
-        print(f"  {key}: {status[key]}")
+        if key != "Power output":
+            print(f"  {key}: {status[key]:4.2f}")
+        else:
+            print(f"  {key}: {status[key]}")
 
 def monitor(ps):
+    '''Print status on terminal every 0.85 seconds.'''
     stop=False
     print("The following was decoded from the power supply stack:")
     while (stop==False):
