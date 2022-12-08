@@ -65,7 +65,7 @@ The following was decoded from the power supply stack:
   Max. voltage (V): 73.0
 ```
 
-### Set max current (0 - 1.55V)
+### Set max current (0 - 1.55A)
 
 Move into the PS folder, then 
 ```bash 
