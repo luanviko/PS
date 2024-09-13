@@ -1,5 +1,5 @@
 '''
-This code looks relies on Linux kernel's generic drivers
+This code relies on Linux kernel's generic drivers
 for serial connections. It looks for the Prolific USB-serial 
 converter shipped with the BK Precision 1787-B, 
 grants access to the user, 
